@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from "vue";
-import { Download, Plus, RotateCcw } from "lucide-vue-next";
+import { Download, Plus, RotateCcw, Upload, FileJson, Users, FileText, Share2 } from "lucide-vue-next";
 import { useCaseStore } from "./stores/useCaseStore";
 import SuspectCard from "./components/SuspectCard.vue";
 import ClueTimeline from "./components/ClueTimeline.vue";
@@ -8,6 +8,16 @@ import RelationGraph from "./components/RelationGraph.vue";
 import BaseButton from "./components/ui/BaseButton.vue";
 
 const store = useCaseStore();
+
+const triggerDownload = (content, filename, type) => {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 const exportData = () => {
   let content = `# ${store.scriptTitle}\n\n`;
@@ -32,15 +42,40 @@ const exportData = () => {
     content += `\n`;
   });
 
-  // Trigger Download
-  const blob = new Blob([content], { type: "text/markdown" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${store.scriptTitle || "case"}_report.md`;
-  a.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(content, `${store.scriptTitle || "case"}_report.md`, "text/markdown");
 };
+
+const exportJSON = () => {
+    const json = store.exportState()
+    triggerDownload(json, `${store.scriptTitle || "case"}_data.json`, "application/json")
+}
+
+const importJSON = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'application/json'
+    input.onchange = (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+        
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            const success = store.importState(e.target.result)
+            if(success) alert('剧本数据导入成功！')
+        }
+        reader.readAsText(file)
+    }
+    input.click()
+}
+
+// Lightbox
+const previewImage = ref(null)
+const handlePreviewImage = (src) => {
+    previewImage.value = src
+}
+
+// Mobile Tabs
+const activeTab = ref('timeline') // 'suspects', 'timeline', 'graph'
 </script>
 
 <template>
@@ -66,20 +101,29 @@ const exportData = () => {
         />
       </div>
       <div class="flex items-center gap-3">
-        <BaseButton @click="store.resetCase" variant="ghost" class="text-xs">
-          <RotateCcw class="w-4 h-4" /> 重置
+        <BaseButton @click="store.resetCase" variant="ghost" class="text-xs" title="清空所有数据">
+          <RotateCcw class="w-4 h-4" />
         </BaseButton>
-        <BaseButton @click="exportData" variant="primary">
-          <Download class="w-4 h-4" /> 导出档案
+        <div class="h-6 w-px bg-mystery-700 mx-1"></div>
+        
+        <BaseButton @click="importJSON" variant="secondary" title="导入数据">
+            <Upload class="w-4 h-4" />
+        </BaseButton>
+        <BaseButton @click="exportJSON" variant="secondary" title="备份数据 (JSON)">
+            <FileJson class="w-4 h-4" />
+        </BaseButton>
+        <BaseButton @click="exportData" variant="primary" title="导出 Markdown 报告">
+          <Download class="w-4 h-4" /> 报告
         </BaseButton>
       </div>
     </header>
 
     <!-- Main Grid -->
-    <main class="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-0">
+    <main class="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12 gap-0 relative">
       <!-- Left: Suspects (3 cols) -->
-      <div
-        class="md:col-span-3 border-r border-mystery-800 bg-mystery-900/50 flex flex-col h-[calc(100vh-64px)]"
+      <div 
+        class="md:col-span-3 border-r border-mystery-800 bg-mystery-900/50 flex-col h-full md:flex"
+        :class="activeTab === 'suspects' ? 'flex' : 'hidden'"
       >
         <div
           class="p-4 border-b border-mystery-800 flex justify-between items-center"
@@ -92,27 +136,29 @@ const exportData = () => {
             <Plus class="w-5 h-5" />
           </button>
         </div>
-        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+        <div class="flex-1 overflow-y-auto p-4 space-y-3 pb-20 md:pb-4">
           <SuspectCard v-for="s in store.suspects" :key="s.id" :suspect="s" />
         </div>
       </div>
 
       <!-- Center: Clue Stream (6 cols) -->
       <div
-        class="md:col-span-6 flex flex-col h-[calc(100vh-64px)] relative bg-slate-900/30"
+        class="md:col-span-6 flex-col h-full relative bg-slate-900/30 md:flex"
+        :class="activeTab === 'timeline' ? 'flex' : 'hidden'"
       >
-        <ClueTimeline />
+        <ClueTimeline @preview-image="handlePreviewImage" class="pb-20 md:pb-0" />
       </div>
 
       <!-- Right: Graph & Analysis (3 cols) -->
       <div
-        class="md:col-span-3 border-l border-mystery-800 bg-mystery-900/50 flex flex-col h-[calc(100vh-64px)] p-4"
+        class="md:col-span-3 border-l border-mystery-800 bg-mystery-900/50 flex-col h-full p-4 md:flex"
+        :class="activeTab === 'graph' ? 'flex' : 'hidden'"
       >
         <h2 class="font-serif text-slate-400 mb-4">关联图谱</h2>
         <RelationGraph class="flex-1 mb-4" />
 
         <div
-          class="bg-mystery-800/50 rounded p-4 text-xs text-slate-400 leading-relaxed border border-mystery-700/50"
+          class="bg-mystery-800/50 rounded p-4 text-xs text-slate-400 leading-relaxed border border-mystery-700/50 mb-20 md:mb-0"
         >
           <h3 class="font-bold text-mystery-gold mb-2 uppercase tracking-wide">
             侦探笔记
@@ -123,5 +169,32 @@ const exportData = () => {
         </div>
       </div>
     </main>
+    
+    <!-- Mobile Bottom Navigation -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-mystery-900 border-t border-mystery-800 flex justify-around items-center z-40 text-xs text-slate-500">
+        <button class="flex flex-col items-center gap-1 p-2" :class="activeTab === 'suspects' ? 'text-mystery-gold' : ''" @click="activeTab = 'suspects'">
+            <Users class="w-5 h-5" />
+            <span>嫌疑人</span>
+        </button>
+        <button class="flex flex-col items-center gap-1 p-2" :class="activeTab === 'timeline' ? 'text-mystery-gold' : ''" @click="activeTab = 'timeline'">
+            <div class="relative">
+                <FileText class="w-5 h-5" />
+                <span v-if="store.clues.length" class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </div>
+            <span>线索墙</span>
+        </button>
+        <button class="flex flex-col items-center gap-1 p-2" :class="activeTab === 'graph' ? 'text-mystery-gold' : ''" @click="activeTab = 'graph'">
+            <Share2 class="w-5 h-5" />
+            <span>关联图</span>
+        </button>
+    </nav>
+
+    <!-- Lightbox Modal -->
+    <div v-if="previewImage" class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-8 backdrop-blur" @click="previewImage = null">
+        <img :src="previewImage" class="max-w-full max-h-full rounded shadow-2xl border border-mystery-gold/30" />
+        <button class="absolute top-4 right-4 text-white hover:text-mystery-gold">
+            <RotateCcw class="w-6 h-6 rotate-45" /> <!-- Using RotateCcw as X icon slightly rotated or just plain text -->
+        </button>
+    </div>
   </div>
 </template>

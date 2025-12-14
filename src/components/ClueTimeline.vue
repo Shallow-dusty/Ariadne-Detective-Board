@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from "vue";
-import { Clock, MapPin, Link2, Plus, X } from "lucide-vue-next";
+import { Clock, MapPin, Link2, Plus, X, Image as ImageIcon, Paperclip } from "lucide-vue-next";
 import { useCaseStore } from "../stores/useCaseStore";
 import BaseButton from "./ui/BaseButton.vue";
 
@@ -10,15 +10,46 @@ const newClue = ref({
   time: "",
   content: "",
   linkedSuspectIds: [],
+  image: null
 });
 
+const fileInput = ref(null)
+
 const add = () => {
-  if (!newClue.value.content) return;
+  if (!newClue.value.content && !newClue.value.image) return;
   store.addClue({ ...newClue.value });
   newClue.value.content = "";
   newClue.value.time = "";
   newClue.value.linkedSuspectIds = [];
+  newClue.value.image = null;
 };
+
+const handlePaste = (e) => {
+    const items = e.clipboardData.items
+    for (let item of items) {
+        if (item.type.indexOf('image') !== -1) {
+            const blob = item.getAsFile()
+            const reader = new FileReader()
+            reader.onload = (event) => {
+                newClue.value.image = event.target.result
+            }
+            reader.readAsDataURL(blob)
+        }
+    }
+}
+
+const triggerFileSelect = () => fileInput.value.click()
+
+const handleFileSelect = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+        newClue.value.image = event.target.result
+    }
+    reader.readAsDataURL(file)
+}
+
 
 const toggleLink = (suspectId) => {
   const ids = newClue.value.linkedSuspectIds;
@@ -40,7 +71,7 @@ const getSuspectName = (id) =>
     <div
       class="p-4 bg-mystery-800/50 border-b border-mystery-700/50 backdrop-blur-sm sticky top-0 z-10"
     >
-      <div class="flex gap-2 mb-2">
+      <div class="flex gap-2 mb-2 items-start">
         <div class="relative w-24 shrink-0">
           <Clock class="absolute left-2 top-2.5 w-4 h-4 text-slate-500" />
           <input
@@ -50,13 +81,31 @@ const getSuspectName = (id) =>
             class="w-full bg-mystery-900 border border-mystery-700 rounded px-2 py-2 pl-8 text-sm focus:border-mystery-gold focus:outline-none"
           />
         </div>
-        <input
-          v-model="newClue.content"
-          type="text"
-          placeholder="发现了什么线索？"
-          class="flex-1 bg-mystery-900 border border-mystery-700 rounded px-3 py-2 text-sm focus:border-mystery-gold focus:outline-none"
-          @keydown.enter="add"
-        />
+        
+        <div class="flex-1 flex flex-col gap-2">
+            <input
+              v-model="newClue.content"
+              type="text"
+              placeholder="发现了什么线索？(支持粘贴图片)"
+              class="w-full bg-mystery-900 border border-mystery-700 rounded px-3 py-2 text-sm focus:border-mystery-gold focus:outline-none"
+              @keydown.enter="add"
+              @paste="handlePaste"
+            />
+            <!-- Image Preview -->
+            <div v-if="newClue.image" class="relative w-fit group">
+                <img :src="newClue.image" class="h-20 rounded border border-mystery-500 object-cover" />
+                <button @click="newClue.image = null" class="absolute -top-2 -right-2 bg-red-500 rounded-full p-0.5 text-white opacity-0 group-hover:opacity-100 transition">
+                    <X class="w-3 h-3" />
+                </button>
+            </div>
+        </div>
+
+        <input type="file" ref="fileInput" accept="image/*" class="hidden" @change="handleFileSelect">
+        
+        <BaseButton @click="triggerFileSelect" variant="secondary" title="上传图片">
+            <ImageIcon class="w-4 h-4" />
+        </BaseButton>
+
         <BaseButton @click="add" variant="primary">
           <Plus class="w-4 h-4" />
         </BaseButton>
@@ -103,6 +152,12 @@ const getSuspectName = (id) =>
         <div
           class="bg-mystery-800 rounded p-3 text-sm hover:bg-mystery-700/50 transition-colors group"
         >
+          
+          <!-- Image Attachment -->
+          <div v-if="clue.image" class="mb-2">
+              <img :src="clue.image" class="max-h-48 rounded border border-mystery-700 object-cover hover:scale-105 transition-transform cursor-zoom-in" @click="$emit('preview-image', clue.image)" />
+          </div>
+
           <div class="flex justify-between items-start mb-1">
             <span class="text-mystery-gold font-mono text-xs font-bold">{{
               clue.time || "Unknown Time"
